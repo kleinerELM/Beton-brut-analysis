@@ -16,7 +16,7 @@ If you are using 50 x 50 cm specimens, as proposed in the regularities, you have
 You may experiment with other row/column values. However, the best results were achieved using 8 "tiles" for 50 cm.
 
 run the script using the following parameters:
-
+```
 .\start_process.py [-h] [-i] [-r] [-c] [-p <poreBrightnessLimit>] [-d]
 -h,                  : show this help
 -i, --noImageJ       : skip ImageJ processing
@@ -24,7 +24,7 @@ run the script using the following parameters:
 -c                   : number of columns [4]
 -p                   : set pore brightness limit (0-255)
 -d                   : show debug output
-
+```
 ## Results
 the overall results will be written to a csv file located in the working directory with the images. It is titled "results8x4.csv", depending on the set rows and columns.
 It contains the filename and the corresponding results in a line.
