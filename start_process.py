@@ -1,9 +1,32 @@
+#########################################################
+# Automated optical analysis of concrete surfaces
+#
+# © 2018 - 2019 Florian Kleiner
+#   Bauhaus-Universität Weimar
+#   Finger-Institut für Baustoffkunde
+#
+# programmed using python 3.7, gnuplot 5.2,
+# Fiji/ImageJ 1.52
+#
+#########################################################
+
 import csv
-import os
+import os, sys, getopt
 import subprocess
 import tkinter as tk
 from tkinter import filedialog
 from subprocess import check_output
+
+
+print("#########################################################")
+print("# Automated optical analysis of concrete surfaces       #")
+print("#                                                       #")
+print("# © 2019 Florian Kleiner                                #")
+print("#   Bauhaus-Universität Weimar                          #")
+print("#   Finger-Institut für Baustoffkunde                   #")
+print("#                                                       #")
+print("#########################################################")
+print()
 
 #global definitions
 root = tk.Tk()
@@ -13,19 +36,68 @@ root.withdraw()
 # 8 x 8 for a 500 x 500 mm area
 rows = 8 
 colums = 4
+poreBrightnessLimit = 51
 
 # turn off ImageJ analysis
 runImageJ_Script = True #True
+showDebuggingOutput = False
+
+resultHeader = ""
 
 uniformity_dir = "/CSV_Uniformity/"
 threshold_uniformity_dir = "/CSV_Threshold_Uniformity/"
 pores_dir = "/CSV_Pores/"
 
-home_dir = os.path.dirname(os.path.realpath(__file__))
-print( "I am living in '" + home_dir + "'" )
-directory = filedialog.askdirectory(title='Please select the data directory')
-print( directory )
-resultHeader = ""
+def processArguments():
+    argv = sys.argv[1:]
+    usage = sys.argv[0] + " [-h] [-i] [-r] [-c] [-p <poreBrightnessLimit>] [-d]"
+    try:
+        opts, args = getopt.getopt(argv,"hir:c:p:d",["noImageJ="])
+        for opt, arg in opts:
+            if opt == '-h':
+                print( 'usage: ' + usage )
+                print( '-h,                  : show this help' )
+                print( '-i, --noImageJ       : skip ImageJ processing' )
+                print( '-r                   : number of rows [8]' )
+                print( '-c                   : number of columns [4]' )
+                print( '-p                   : set pore brightness limit (0-255)' )
+                print( '-d                   : show debug output' )
+                print( '' )
+                sys.exit()
+            elif opt in ("-i", "-noImageJ"):
+                print( 'deactivating ImageJ processing!' )
+                global runImageJ_Script
+                runImageJ_Script = False
+            elif opt in ("-r"):
+                global rows
+                if ( int( arg ) > 0 ):
+                    rows = int( arg )
+                    print( 'number of rows changed to ' + str( rows ) )
+            elif opt in ("-c"):
+                global colums
+                if ( int( arg ) > 0 ):
+                    colums = int( arg )
+                    print( 'number of columns changed to ' + str( colums ) )
+            elif opt in ("-l"):
+                if ( arg == "i" or arg == "a" ):
+                    global createLogVideos
+                    createLogVideos = arg
+                    if( arg == "i" ):
+                        print( 'creating ion alignment video!' )
+                    else:
+                        print( 'creating all log videos!' )
+            elif opt in ("-p"):
+                if ( int( arg ) < 256 and int( arg ) > -1 ):
+                    global poreBrightnessLimit
+                    poreBrightnessLimit = int( arg )
+                    print( 'set pore threshold limit to ' + str( poreBrightnessLimit ) )
+            elif opt in ("-d"):
+                print( 'show debugging output' )
+                global showDebuggingOutput
+                showDebuggingOutput = True
+    except getopt.GetoptError:
+        print( usage )
+    print( '' )
 
 def processScliceResults(filename, nameSuffix, rows, columns ):
     print( " analyse dataset " + nameSuffix )
@@ -244,29 +316,27 @@ def processData(filename, rows, columns):
     #    spamwriter.writerow(resultLine)
 
 #main process
+
+processArguments()
+
+home_dir = os.path.dirname(os.path.realpath(__file__))
+if ( showDebuggingOutput ) : print( "I am living in '" + home_dir + "'" )
+directory = filedialog.askdirectory(title='Please select the data directory')
+if ( showDebuggingOutput ) : print( directory )
 if os.path.isdir(directory):
     if ( runImageJ_Script ):
-        command = "..\Fiji.app\ImageJ-win64.exe -macro \"" + home_dir +"\Sichtbetonanalyse_Grey.ijm\" \"" + directory + "/|" + str(rows) + "|" + str(colums) + "\""
+        command = "ImageJ-win64.exe -macro \"" + home_dir +"\Sichtbetonanalyse_Grey.ijm\" \"" + directory + "/|" + str( rows ) + "|" + str( colums ) + "|" + str( poreBrightnessLimit ) + "\""
         print( "starting ImageJ Macro..." )
         try:
             subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
         except subprocess.CalledProcessError as e:
-            print( "Error" )#"returned error (code {}): {}".format(e.returncode, e.output))
+            print( "Error" )
             pass
-        #command = "..\Fiji.app\ImageJ-win64.exe -macro \"" + home_dir +"\Sichtbetonanalyse_Color.ijm\" \"" + directory + "/|" + str(rows) + "|" + str(colums) + "\""
-        #print( command )
-        #check_output(command, shell=True)
     if os.path.isdir(directory+uniformity_dir):
         csv_file = open(directory + '/results' + str(rows) + "x" + str(colums) + '.csv', 'w')
-        # csv_file.write( 'name, neighbourDeltaPercent, neighbourDeltaMaxPercent, sigmaMeanPercent, neighbourDeltaDiff_T_Low, neighbourDeltaDiffMax_T_Low, areaSum_T_Low, countSum_T_Low, imageArea, poreAreaPercent' + "\n" )
         csv_file.write( 'name, neighbourDeltaDiff, neighbourDeltaDiffMax, differenceMean, differenceMin, differenceMax, verticalMeanBD, horizontalMeanBD,MeanBDHighXPercent,MeanBDHighYPercent, imageArea, poreAreaPercent' + "\n" )
         
         csv_file.close()
-        #with open(directory + '/results' + str(rows) + "x" + str(colums) + '.csv', 'w', newline='') as csvfile:
-        #    spamwriter = csv.writer(csvfile, delimiter=',',
-        #                                    quotechar='|', quoting=csv.QUOTE_MINIMAL)
-        #    #spamwriter.writerow(['name', 'neighbourDelta', 'neighbourDeltaMax', 'neighbourDeltaPercent', 'neighbourDeltaMaxPercent', 'sigmaMean', 'sigmaMeanPercent', 'brightnessMean', 'imageArea', 'poreAreaPercent'])
-        #    spamwriter.writerow(['name', 'neighbourDeltaPercent', 'neighbourDeltaMaxPercent', 'sigmaMeanPercent', 'neighbourDelta_T_High', 'neighbourDeltaMax_T_High', 'neighbourDelta_T_Low', 'neighbourDeltaMax_T_Low', 'imageArea', 'poreAreaPercent'])
 
         for file in os.listdir(directory):
             filename = os.fsdecode(file)
@@ -276,8 +346,7 @@ if os.path.isdir(directory):
                     processData( csv_filename, rows, colums )
                 else:
                     print(csv_filename +"_histogrammStats.csv not found!")
-            else:
-                print(filename + " is no Jpg / Tiff! Skipping!")
+            elif ( showDebuggingOutput ) : print(filename + " is no Jpg / Tiff! Skipping!")
     else:
         print("Folder '" + uniformity_dir + "' does not exist! Run ImageJ Macro first!")
 else:

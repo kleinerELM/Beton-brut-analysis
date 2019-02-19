@@ -1,7 +1,7 @@
-// Macro for ImageJ 1.52d for Windows
-// written by Florian Kleiner 2018
+// Macro for ImageJ 1.52i for Windows
+// written by Florian Kleiner 2018 - 2019
 // run from commandline as follows
-// ImageJ-win64.exe -macro "C:\path\to\Sichtbetonanalyse.ijm" "D:\path\to\data\|rows|columns"
+// ImageJ-win64.exe -macro "C:\path\to\Sichtbetonanalyse.ijm" "D:\path\to\data\|rows|columns|poreBrightnessLimit"
 
 function rotateAndResize( debugOutput ) {
 	//////////////////////
@@ -29,13 +29,14 @@ macro "Sichtbetonanalyse" {
 		//define number of slices for uniformity analysis
 		rows = 8;
 		columns = 4;
+		poreBrightnessLimit = 51; // max threshold value to detect Pores
 	} else {
 		arg_split = split(getArgument(),"|");
 		dir = arg_split[0];
 		rows = parseInt(arg_split[1]);
 		columns = parseInt(arg_split[2]);
+		poreBrightnessLimit = parseInt(arg_split[2]);
 	}
-	poreBrightnessLimit = 51; // max threshold value to detect Pores
 	percentileLimit = 0.05;
 	desiredImageMean = 170; // target value for the average image brightness
 	ignoreDifferenceRange = 0.0; // allowed brightness deviation which will be ignored during the brightness distribution analysis
