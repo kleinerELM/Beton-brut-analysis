@@ -60,7 +60,7 @@ def processArguments():
                 print( '-i, --noImageJ       : skip ImageJ processing' )
                 print( '-r                   : number of rows [8]' )
                 print( '-c                   : number of columns [4]' )
-                print( '-p                   : set pore brightness limit (0-255)' )
+                print( '-p                   : set pore brightness limit [51] (0-255)' )
                 print( '-d                   : show debug output' )
                 print( '' )
                 sys.exit()
