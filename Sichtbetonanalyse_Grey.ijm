@@ -18,7 +18,126 @@ function rotateAndResize( debugOutput ) {
 		if ( debugOutput ) { print( "  w x h : " + width + " x " + height ); }
 	}
 	resultingWidth = round(maxSize / height * width);
-	if ( debugOutput ) { run("Size...", "height=" + maxSize + " width=" + resultingWidth + " constrain average interpolation=Bilinear"); }
+	run("Size...", "height=" + maxSize + " width=" + resultingWidth + " constrain average interpolation=Bilinear");
+	height = maxSize;
+	width = resultingWidth;
+}
+
+function getFFTBinary( filename ) {
+	// convert to 8bit grayscale
+	if ( bitDepth() == 16 ) { // für 16 Bit-RGB-Stacks
+		run("8-bit");
+		run("RGB Color");
+		run("8-bit");
+		print( "  converted from 16 bit RGB to grayscale" );
+	} else {
+		run("8-bit");
+		print( "  converted RGB to grayscale" );
+	}
+	print( "  creating FFT binary ..." );
+	run("FFT");
+	//saveAs("PNG", outputDir_FFT + baseName + "2.png");
+	selectWindow( "FFT of " + filename);
+	run("Smooth");
+	run("Gaussian Blur...", "sigma=4");
+	run("Gaussian Blur...", "sigma=4");
+	run("Subtract Background...", "rolling=50 sliding");// oder 500 für ein gutes Binärbild
+	run("Enhance Contrast...", "saturated=0.1");
+	saveAs("PNG", outputDir_FFT + baseName + ".png");
+	//setAutoThreshold("Intermodes dark");
+	//setThreshold(128, 255);
+	//run("Convert to Mask");
+	//run("Erode");
+	//run("Erode");
+	//run("Dilate");
+	//run("Dilate");
+	//run("Dilate");
+	//print( "  saving FFT binary ..." );
+	//saveAs("PNG", outputDir_FFT + baseName + ".png");
+	selectWindow( baseName + ".png" );
+	close();
+}
+
+function processTiles( basename, channel, directory, cWidth, cHeight ) {
+	run("Set Measurements...", "mean standard redirect=None decimal=3");
+	for(k=0; k<columns; k++) {
+		for(l=0; l<rows; l++) {
+			startX = k*cWidth;
+			startY = l*cHeight;
+
+			makeRectangle(startX, startY, cWidth, cHeight);
+			run("Measure");
+		}
+	}
+	print( "    saving CSV (" + channel + ") ..." );
+	selectWindow("Results");
+	saveAs("Text", directory + basename + "_" + channel + ".csv");
+	Table.deleteRows(0, (rows*columns));
+}
+
+function processLAB( filename ) {
+	print( "  process LAB color space" );
+	if ( bitDepth() == 16 ) { // für 16 Bit-RGB-Stacks
+		// convert to 8bit color space RGB image
+		run("8-bit");
+		run("RGB Color");
+		print( "    converted from 16-Bit RGB-Stack to 24-Bit RGB" );
+	}
+	run("Lab Stack");
+	width = getWidth();
+	height = getHeight();
+	cWidth = round(width/columns);
+	cHeight = round(height/rows);
+
+	print( "    Calculate color uniformity ..." );
+	// extract color channels
+	run("Split Channels");
+
+	// discard brightness channel
+	selectWindow("C1-" + filename);
+	close();
+	
+	basename = substring(filename, 0, lengthOf(filename)-4);
+	channel = newArray( "C2", "C3" ); //C2:red-green-channel, C3: blue-yellow-channel
+	for (i=0; i<channel.length; i++) {
+		print( "    " + channel[i] );
+		selectWindow(channel[i] + "-" + filename);
+		processTiles( filename, channel[i], outputDir_Uniformity, cWidth, cHeight );
+		selectWindow(channel[i] + "-" + filename);
+		tiffName = basename + "-" + channel[i] + ".tif";
+		rename( tiffName );
+		saveAs("Tiff", outputDir_RGBW + tiffName);
+		close();
+	}
+}
+
+function processRGB( filename, channel ) {
+	print( "  process RGB color space" );
+	open(path);
+	rotateAndResize( true );
+	if ( bitDepth() == 16 ) { // für 16-Bit-RGB-Stacks
+		// convert to 8-bit color space RGB image
+		run("8-bit");
+		run("RGB Color");
+		print( "    converted from 16-Bit RGB-Stack to 24-Bit RGB" );
+	}
+	width = getWidth();
+	height = getHeight();
+	cWidth = round(width/columns);
+	cHeight = round(height/rows);
+				
+	run("Split Channels");
+	basename = substring(filename, 0, lengthOf(filename)-4);
+	for (i=0; i<channel.length; i++) {
+		//print( "    " + channel[i] );
+		selectWindow(filename + " (" + channel[i] + ")");
+		processTiles( filename, channel[i], outputDir_Uniformity, cWidth, cHeight );
+		selectWindow(filename + " (" + channel[i] + ")");
+		tiffName = basename + "-" + channel[i] + ".tif";
+		rename( tiffName );
+		saveAs("Tiff", outputDir_RGBW + tiffName);
+		//close();
+	}
 }
 
 macro "Sichtbetonanalyse" {
@@ -30,18 +149,24 @@ macro "Sichtbetonanalyse" {
 		rows = 8;
 		columns = 4;
 		poreBrightnessLimit = 51; // max threshold value to detect Pores
+		doBackGroundCorrection = 1;
+		disableBrightnessDifferenceCorrection = false;
 	} else {
 		arg_split = split(getArgument(),"|");
 		dir = arg_split[0];
 		rows = parseInt(arg_split[1]);
 		columns = parseInt(arg_split[2]);
-		poreBrightnessLimit = parseInt(arg_split[2]);
+		poreBrightnessLimit = parseInt(arg_split[3]);
+		doBackGroundCorrection = parseInt(arg_split[4]);
+		disableBrightnessDifferenceCorrection = true;
 	}
+	doFFT = false;
+	doLAB = false;
 	percentileLimit = 0.05;
 	desiredImageMean = 170; // target value for the average image brightness
 	ignoreDifferenceRange = 0.0; // allowed brightness deviation which will be ignored during the brightness distribution analysis
 	countMaxDifferenceLimit = 0.8;
-	maxSize = 2000; //resize oversized (or undersized) images to a defined resolution
+	maxSize = 500; //resize oversized (or undersized) images to a defined resolution
 	print("Starting Process using the following arguments...");
 	print("Directory: " + dir);
 	print("Rows: " + rows);
@@ -56,12 +181,14 @@ macro "Sichtbetonanalyse" {
 	outputDir_Threshold_Uniformity = dir + "/CSV_Threshold_Uniformity/";
 	outputDir_PoresCSV = dir + "/CSV_Pores/";
 	outputDir_PoresPNG = dir + "/PNG_Pores/";
+	outputDir_FFT = dir + "/FFT_binary/";
 	File.makeDirectory(outputDir_Corrected);
 	File.makeDirectory(outputDir_Uniformity);
 	File.makeDirectory(outputDir_RGBW);
 	File.makeDirectory(outputDir_Threshold_Uniformity);
 	File.makeDirectory(outputDir_PoresPNG);
 	File.makeDirectory(outputDir_PoresCSV);
+	File.makeDirectory(outputDir_FFT);
 	list = getFileList(dir);
 	setBatchMode(true);
 	for (i=0; i<list.length; i++) {
@@ -77,40 +204,46 @@ macro "Sichtbetonanalyse" {
 				filename = getTitle();
 				print( filename );
 				baseName = substring(filename, 0, lengthOf(filename)-4);
-				redName = baseName + "-red.tif";
-				blueName = baseName + "-blue.tif";
-				greenName = baseName + "-green.tif";
 				
 				grayName = baseName + "-gray.tif";
 				lightName = baseName + "-lightpattern.tif";
 				normalizedName = baseName + "-normalized.tif";
 				correctedName = baseName + "-corrected.tif";
 				
-				rotateAndResize( true );
+				//////////////////////
+				// extract FFT-Information
+				//////////////////////
+				if ( doFFT ) {
+					getFFTBinary( filename );
+					
+					selectWindow(filename);
+					close();
+					open(path);
+				}
 				
+				//////////////////////
+				// extract LAB color channels
+				//////////////////////
+				if ( doLAB ) {
+					processLAB( filename );
+				}
+
 				//////////////////////
 				// extract RGB color channels
 				//////////////////////
-				run("Split Channels");
-
-				selectWindow(filename + " (blue)");
-				rename(blueName);
-				saveAs("Tiff", outputDir_RGBW + blueName);
-				//close();
-				
-				selectWindow(filename + " (green)");
-				rename(greenName);
-				saveAs("Tiff", outputDir_RGBW + greenName);
-				//close();
-				
-				selectWindow(filename + " (red)");
-				rename(redName);
-				saveAs("Tiff", outputDir_RGBW + redName);
-				//close();
+				channelRGB = newArray( "red", "green", "blue" );
+				processRGB( filename, channelRGB );
 				
 				//reopen original image
 				open(path);
+				if ( bitDepth() == 16 ) { // für 16 Bit-RGB-Stacks
+					// convert to 8bit color space RGB image
+					run("8-bit");
+					run("RGB Color");
+					print( "  converted to RGB" );
+				}
 				imageId = getImageID();
+				
 				
 				rotateAndResize( false );
 				width = getWidth();
@@ -141,13 +274,13 @@ macro "Sichtbetonanalyse" {
 					if ( imageMeanDifference < -0.5 * poreBrightnessLimit ) {
 						print( "  big brightness difference detected! Pore analysis may be affected!" );
 					}
-					if ( imageMeanDifference > 0.5 * poreBrightnessLimit ) {
+					if ( imageMeanDifference > 0.5 * poreBrightnessLimit && !disableBrightnessDifferenceCorrection) {
 						print( "  big brightness difference detected! Pore analysis may be affected! Trying to correct contrast ..." );
 						hmin = 0;
 						hmax = 255-(imageMeanDifference * 2);
 						setMinAndMax(hmin, hmax); 
 						print("  setMinAndMax(" + hmin + ", " + hmax + ")"); 
-						run("Apply LUT"); 
+						//run("Apply LUT"); 
 					}
 					
 					if ( imageMeanDifference < 0 ) {
@@ -158,9 +291,11 @@ macro "Sichtbetonanalyse" {
 						}
 					}
 					// saveAs("Tiff", outputDir_Corrected + substring(filename, 0, lengthOf(filename)-4)+"_brightness.tif" );
-
-					radius=round(width/10);
-					run("Normalize Local Contrast", "block_radius_x=" + radius + " block_radius_y=" + radius + " standard_deviations=10 center");
+					if ( doBackGroundCorrection > 0 ) {
+						//radius=round(width/10);
+						radius=round(width/(columns/2));
+						run("Normalize Local Contrast", "block_radius_x=" + radius + " block_radius_y=" + radius + " standard_deviations=10 center");
+					}
 					
 					print( "  saving corrected grey-scale TIF..." );
 					saveAs("Tiff", path_corrected );
@@ -196,26 +331,25 @@ macro "Sichtbetonanalyse" {
 				run("8-bit"); //reduce image bit depth
 				getStatistics(a, light_mean, min, max, light_std);//get statistics
 				print("  light_mean: " + light_mean + " +- " + light_std );
+				
+				//if ( !disableBrightnessDifferenceCorrection ) {
+					// remove brightness differences in R G B
+					run("Subtract...", "value=" + ( light_mean - 2*light_std ));
+					print("  remove brightness differences in RGB. Subtracting " + ( light_mean - 2*light_std ) );
+					run("Gaussian Blur...", "sigma=" + round(height*0.02) ); // smooth shades (radius: 2% of largest dimension)
+					saveAs("Tiff", outputDir_RGBW + lightName);
+					channelRGB = newArray( "red", "green", "blue" );
+					for (i=0; i<channelRGB.length; i++) {
+						print( "    calculate " + channelRGB[i] + " - light" );
+						imageCalculator("Subtract", baseName + "-" + channelRGB[i] + ".tif", lightName);
+						run("Add...", "value=" + 2*light_std); 
+					}
 
-				// remove brightness differences in R G B
-				run("Subtract...", "value=" + ( light_mean - 2*light_std ));
-				print("  remove brightness differences in RGB. Subtracting " + ( light_mean - 2*light_std ) );
-				run("Gaussian Blur...", "sigma=" + round(height*0.02) ); // smooth shades (radius: 2% of largest dimension)
-				saveAs("Tiff", outputDir_RGBW + lightName);
-				print(blueName);
-				imageCalculator("Subtract", blueName, lightName);
-				run("Add...", "value=" + 2*light_std); 
-				print(greenName);
-				imageCalculator("Subtract", greenName, lightName);
-				run("Add...", "value=" + 2*light_std); 
-				print(redName);
-				imageCalculator("Subtract", redName, lightName);
-				run("Add...", "value=" + 2*light_std); 
-
-				// remerge RGB Channels to color image
-				run("Merge Channels...", "c1=[" + redName + "] c2=[" + greenName + "] c3=[" + blueName + "]");
-				saveAs("Tiff", outputDir_RGBW + correctedName);
-				rename(filename);
+					// remerge RGB Channels to color image
+					run("Merge Channels...", "c1=[" + baseName + "-" + channelRGB[0] + ".tif] c2=[" + baseName + "-" + channelRGB[1] + ".tif] c3=[" + baseName + "-" + channelRGB[2] + ".tif]");
+					saveAs("Tiff", outputDir_RGBW + correctedName);
+					rename(filename);
+				//}
 				
 				//////////////////////
 				// calculate brightness-distribution (horizontal/vertical)
@@ -369,6 +503,6 @@ macro "Sichtbetonanalyse" {
 	}
 	print("Done!");
 	if ( arg != "" ) {
-		run("Quit");
+		//run("Quit");
 	}
 }

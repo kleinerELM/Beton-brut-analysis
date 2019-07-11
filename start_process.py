@@ -35,12 +35,13 @@ root.withdraw()
 # define sektor grid
 # 8 x 8 for a 500 x 500 mm area
 rows = 8 
-colums = 4
+colums = 8
 poreBrightnessLimit = 51
 
 # turn off ImageJ analysis
 runImageJ_Script = True #True
 showDebuggingOutput = False
+doBackGroundCorrection = 0
 
 resultHeader = ""
 
@@ -49,18 +50,22 @@ threshold_uniformity_dir = "/CSV_Threshold_Uniformity/"
 pores_dir = "/CSV_Pores/"
 
 def processArguments():
+    global rows
+    global colums
+    global poreBrightnessLimit
     argv = sys.argv[1:]
-    usage = sys.argv[0] + " [-h] [-i] [-r] [-c] [-p <poreBrightnessLimit>] [-d]"
+    usage = sys.argv[0] + " [-h] [-i] [-b] [-r] [-c] [-p <poreBrightnessLimit>] [-d]"
     try:
-        opts, args = getopt.getopt(argv,"hir:c:p:d",["noImageJ="])
+        opts, args = getopt.getopt(argv,"hibr:c:p:d",["noImageJ="])
         for opt, arg in opts:
             if opt == '-h':
                 print( 'usage: ' + usage )
                 print( '-h,                  : show this help' )
                 print( '-i, --noImageJ       : skip ImageJ processing' )
-                print( '-r                   : number of rows [8]' )
-                print( '-c                   : number of columns [4]' )
-                print( '-p                   : set pore brightness limit [51] (0-255)' )
+                print( '-b,                  : activate background correction due to lighting errors' )
+                print( '-r                   : number of rows ['+ str( rows )+']' )
+                print( '-c                   : number of columns ['+ str( colums ) +']' )
+                print( '-p                   : set pore brightness limit ['+ str( poreBrightnessLimit )+'] (0-255)' )
                 print( '-d                   : show debug output' )
                 print( '' )
                 sys.exit()
@@ -68,27 +73,20 @@ def processArguments():
                 print( 'deactivating ImageJ processing!' )
                 global runImageJ_Script
                 runImageJ_Script = False
+            elif opt in ("-i", "-noImageJ"):
+                print( 'activating background correction!' )
+                global doBackGroundCorrection
+                doBackGroundCorrection = 1
             elif opt in ("-r"):
-                global rows
                 if ( int( arg ) > 0 ):
                     rows = int( arg )
                     print( 'number of rows changed to ' + str( rows ) )
             elif opt in ("-c"):
-                global colums
                 if ( int( arg ) > 0 ):
                     colums = int( arg )
                     print( 'number of columns changed to ' + str( colums ) )
-            elif opt in ("-l"):
-                if ( arg == "i" or arg == "a" ):
-                    global createLogVideos
-                    createLogVideos = arg
-                    if( arg == "i" ):
-                        print( 'creating ion alignment video!' )
-                    else:
-                        print( 'creating all log videos!' )
             elif opt in ("-p"):
                 if ( int( arg ) < 256 and int( arg ) > -1 ):
-                    global poreBrightnessLimit
                     poreBrightnessLimit = int( arg )
                     print( 'set pore threshold limit to ' + str( poreBrightnessLimit ) )
             elif opt in ("-d"):
@@ -325,7 +323,7 @@ directory = filedialog.askdirectory(title='Please select the data directory')
 if ( showDebuggingOutput ) : print( directory )
 if os.path.isdir(directory):
     if ( runImageJ_Script ):
-        command = "ImageJ-win64.exe -macro \"" + home_dir +"\Sichtbetonanalyse_Grey.ijm\" \"" + directory + "/|" + str( rows ) + "|" + str( colums ) + "|" + str( poreBrightnessLimit ) + "\""
+        command = "ImageJ-win64.exe -macro \"" + home_dir +"\Sichtbetonanalyse_Grey.ijm\" \"" + directory + "/|" + str( rows ) + "|" + str( colums ) + "|" + str( poreBrightnessLimit ) + "|" + str( doBackGroundCorrection ) + "\""
         print( "starting ImageJ Macro..." )
         try:
             subprocess.check_output(command, shell=True, stderr=subprocess.STDOUT)
